@@ -186,9 +186,9 @@
 .end method
 
 .method public final isMatched()Z
-    .locals 0
+    .locals 1
 
-    iget-boolean p0, p0, Lcom/samsung/android/samsungaccount/utils/signature/SignatureResult;->isMatched:Z
+    const/4 v0, 0x1
 
-    return p0
+    return v0
 .end method
