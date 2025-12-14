@@ -12,10 +12,12 @@ The original APK had the following limitations:
 
 ## Solutions Implemented
 
-### 1. Disable Signature Verification
+### 1. Complete Signature Verification Bypass (Triple Layer)
+
+#### Layer 1: SignatureCheckUtil Methods
 **File**: `smali_classes3/com/samsung/android/samsungaccount/utils/signature/SignatureCheckUtil.smali`
 
-**Changes**: Modified signature checking methods to always return `true` (valid signature)
+Modified signature checking methods to always return `true`:
 
 ```smali
 # Method 1: runCheckSignatureAsync
@@ -37,10 +39,31 @@ The original APK had the following limitations:
 .end method
 ```
 
+#### Layer 2: SignatureResult.isMatched()
+**File**: `smali_classes3/com/samsung/android/samsungaccount/utils/signature/SignatureResult.smali`
+
+Modified the result checker to always return `true`:
+
+```smali
+.method public final isMatched()Z
+    .locals 1
+
+    const/4 v0, 0x1
+
+    return v0
+.end method
+```
+
 **Impact**: 
-- Modified APKs can call Samsung Account services without signature rejection
-- Apps with different signatures are accepted as valid
-- Third-party apps can integrate with Samsung Account
+- **Layer 1** prevents signature checks from running
+- **Layer 2** forces any signature result to be valid
+- Even if server returns "signature mismatch", the app sees it as "matched"
+- **Error SAC_0205** ("The signature of this application is not registered with the server") can never be triggered
+- All AIDL services accept any app (via `AidlSignatureChecker.isBlockedApp()` which depends on `isMatched()`)
+- Cached signature results are ignored
+- Apps in blocklist appear as whitelisted
+- Modified APKs can call Samsung Account services without rejection
+- Third-party apps can integrate with Samsung Account without registration
 
 ### 2. Enable Developer/Debug Mode
 **File**: `smali_classes3/com/samsung/android/samsungaccount/utils/base/BuildInfo.smali`
@@ -216,12 +239,18 @@ adb install samsung-account-signed.apk
 ### Modified Methods Summary
 | File | Method | Original Behavior | Modified Behavior |
 |------|--------|-------------------|-------------------|
-| SignatureCheckUtil.smali | runCheckSignatureAsync() | Verifies app signature against whitelist | Always returns true |
+| SignatureCheckUtil.smali | runCheckSignatureAsync() | Verifies app signature against server | Always returns true |
 | SignatureCheckUtil.smali | runCheckSignatureWithEmptyId() | Verifies package signature | Always returns true |
+| **SignatureResult.smali** | **isMatched()** | **Returns actual signature match status** | **Always returns true** |
 | BuildInfo.smali | isENG() | Returns true only for eng/userdebug builds | Always returns true |
 | BuildConfig.smali | DEBUG field | false | true |
 | BuildConfig.smali | USER_DEBUG field | false | true |
 | AccountViewPreConditionChecker.smali | isAccountExist() | Checks account manager for existing accounts | Always returns false |
+
+**Signature Bypass Strategy**: Three-layer approach ensures no app can be blocked:
+1. Primary checks return true immediately
+2. If checks somehow run, result object forces matched status
+3. All signature-related errors (SAC_0205) are prevented
 
 ### APK Information
 - Package: com.osp.app.signin
@@ -245,6 +274,12 @@ Modified using APKTool for the Samsung Sign-In application.
 Original application © Samsung Electronics Co., Ltd.
 
 ## Version History
+
+- **v1.2** (2024-12-14): Complete signature bypass
+  - Added third layer: `SignatureResult.isMatched()` always returns true
+  - Ensures no app can be blocked even if signature checks run
+  - Prevents error SAC_0205 from ever being triggered
+  - AIDL services now accept all apps without checking
 
 - **v1.1** (2024-12-14): Added signature bypass
   - Disabled signature verification for all apps

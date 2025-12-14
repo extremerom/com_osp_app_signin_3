@@ -22,14 +22,38 @@ Esto impedía:
 
 ## Solución Implementada
 
-### 1. Verificación de Firmas Deshabilitada
-**Archivo modificado**: `SignatureCheckUtil.smali`
+### 1. Verificación de Firmas Deshabilitada (Triple Capa)
 
+**Archivos modificados**: 
+- `SignatureCheckUtil.smali`
+- `SignatureResult.smali`
+
+#### Capa 1: Métodos de Verificación
 Los métodos de verificación ahora siempre retornan `true` (firma válida):
 - `runCheckSignatureAsync()` - Siempre retorna true
 - `runCheckSignatureWithEmptyId()` - Siempre retorna true
 
-**Resultado**: APKs modificadas pueden acceder a servicios de Samsung sin rechazo
+#### Capa 2: Resultado de Verificación
+El método `isMatched()` en `SignatureResult` ahora siempre retorna `true`:
+
+```smali
+.method public final isMatched()Z
+    .locals 1
+
+    const/4 v0, 0x1
+
+    return v0
+.end method
+```
+
+**Resultado**: 
+- **Ninguna app puede ser bloqueada por firma**
+- Incluso si el servidor responde "firma no válida", la app lo ve como "válida"
+- Error **SAC_0205** ("The signature of this application is not registered") nunca aparece
+- Servicios AIDL aceptan cualquier app (via `isBlockedApp()` que usa `isMatched()`)
+- Apps en lista negra aparecen como válidas
+- APKs modificadas funcionan sin rechazo
+- Apps de terceros pueden usar Samsung Account sin registro
 
 ### 2. Modo Desarrollador Habilitado
 **Archivo modificado**: `BuildInfo.smali`
@@ -217,10 +241,16 @@ adb install samsung-account-firmada.apk
 
 | Archivo | Cambio | Propósito |
 |---------|--------|-----------|
-| `SignatureCheckUtil.smali` | Verificación siempre true | Permite APKs modificadas |
+| `SignatureCheckUtil.smali` | Métodos verificación → siempre true | Bypassa verificaciones primarias |
+| `SignatureResult.smali` | isMatched() → siempre true | Fuerza resultados como válidos |
 | `BuildInfo.smali` | isENG() siempre true | Habilita modo desarrollador |
 | `BuildConfig.smali` | DEBUG = true | Activa logging debug |
 | `AccountViewPreConditionChecker.smali` | isAccountExist() siempre false | Arregla sincronización |
+
+**Estrategia de Bypass de Firma**: Tres capas aseguran que ninguna app sea bloqueada:
+1. Verificaciones primarias retornan true inmediatamente
+2. Si las verificaciones corren de alguna forma, el objeto resultado fuerza estado "matched"
+3. Todos los errores de firma (SAC_0205) están prevenidos
 
 ## Información del APK
 
@@ -277,6 +307,13 @@ El código original de Samsung Account pertenece a Samsung Electronics Co., Ltd.
 ---
 
 ## Historial de Versiones
+
+### v1.2 (14-12-2024)
+- ✅ Añadido bypass completo de firma (tercera capa)
+- ✅ `SignatureResult.isMatched()` siempre retorna true
+- ✅ Ninguna app puede ser bloqueada incluso si verificaciones corren
+- ✅ Error SAC_0205 nunca puede ser disparado
+- ✅ Servicios AIDL aceptan todas las apps
 
 ### v1.1 (14-12-2024)
 - ✅ Añadida deshabilitación de verificación de firmas
